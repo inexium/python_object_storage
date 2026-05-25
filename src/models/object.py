@@ -12,3 +12,4 @@ class Object(SQLModel, table=True):
     etag: str
     content_type: str = Field(default="application/octet-stream")
     last_modified: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    user_metadata: str = Field(default="{}")  # JSON-serialized x-amz-meta-* headers
