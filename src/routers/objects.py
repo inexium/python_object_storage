@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from src.database import get_session
 from src.models.bucket import Bucket
 from src.models.object import Object
+from src.routers.buckets import handle_create_bucket, handle_delete_bucket, handle_head_bucket, handle_list_objects
 from src.routers.multipart import handle_abort_multipart, handle_list_parts, handle_upload_part
 from src.services.storage import StorageService
 from src.services.xml_builder import XmlBuilder
@@ -146,6 +147,8 @@ async def put_object(
     upload_id: str | None = Query(default=None, alias="uploadId"),
     session: Session = Depends(get_session),
 ) -> Response:
+    if not key:
+        return handle_create_bucket(bucket, session)
     if part_number is not None and upload_id is not None:
         body = await request.body()
         return handle_upload_part(bucket, key, upload_id, part_number, body, session)
@@ -202,6 +205,16 @@ def get_object(
     upload_id: str | None = Query(default=None, alias="uploadId"),
     session: Session = Depends(get_session),
 ) -> Response:
+    if not key:
+        qp = request.query_params
+        return handle_list_objects(
+            bucket,
+            qp.get("prefix", ""),
+            qp.get("delimiter", ""),
+            int(qp.get("max-keys", "1000")),
+            qp.get("continuation-token"),
+            session,
+        )
     if upload_id is not None:
         return handle_list_parts(bucket, key, upload_id, session)
     if not session.get(Bucket, bucket):
@@ -227,6 +240,8 @@ def head_object(
     key: str,
     session: Session = Depends(get_session),
 ) -> Response:
+    if not key:
+        return handle_head_bucket(bucket, session)
     if not session.get(Bucket, bucket):
         return Response(status_code=404)
 
@@ -244,6 +259,8 @@ def delete_object(
     upload_id: str | None = Query(default=None, alias="uploadId"),
     session: Session = Depends(get_session),
 ) -> Response:
+    if not key:
+        return handle_delete_bucket(bucket, session)
     if upload_id is not None:
         return handle_abort_multipart(bucket, key, upload_id, session)
     if not session.get(Bucket, bucket):

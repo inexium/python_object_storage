@@ -28,19 +28,7 @@ def _err(code: str, message: str, *, resource: str | None = None, status: int = 
     return Response(content=body, status_code=status, media_type="application/xml")
 
 
-@router.get("/")
-def list_buckets(session: Session = Depends(get_session)) -> Response:
-    buckets = session.exec(select(Bucket)).all()
-    body = _xml.build_list_buckets_response(
-        owner_id="owner",
-        owner_name="owner",
-        buckets=[{"name": b.name, "creation_date": b.creation_date} for b in buckets],
-    )
-    return Response(content=body, media_type="application/xml")
-
-
-@router.put("/{bucket}")
-def create_bucket(bucket: str, session: Session = Depends(get_session)) -> Response:
+def handle_create_bucket(bucket: str, session: Session) -> Response:
     if not _is_valid_bucket_name(bucket):
         return _err("InvalidBucketName", "The specified bucket is not valid.", resource=f"/{bucket}")
     if session.get(Bucket, bucket):
@@ -55,15 +43,13 @@ def create_bucket(bucket: str, session: Session = Depends(get_session)) -> Respo
     return Response(status_code=200, headers={"Location": f"/{bucket}"})
 
 
-@router.head("/{bucket}")
-def head_bucket(bucket: str, session: Session = Depends(get_session)) -> Response:
+def handle_head_bucket(bucket: str, session: Session) -> Response:
     if not session.get(Bucket, bucket):
         return Response(status_code=404)
     return Response(status_code=200)
 
 
-@router.delete("/{bucket}")
-def delete_bucket(bucket: str, session: Session = Depends(get_session)) -> Response:
+def handle_delete_bucket(bucket: str, session: Session) -> Response:
     b = session.get(Bucket, bucket)
     if not b:
         return _err("NoSuchBucket", "The specified bucket does not exist.", resource=f"/{bucket}", status=404)
@@ -75,14 +61,13 @@ def delete_bucket(bucket: str, session: Session = Depends(get_session)) -> Respo
     return Response(status_code=204)
 
 
-@router.get("/{bucket}")
-def list_objects(
+def handle_list_objects(
     bucket: str,
-    prefix: str = Query(default="", alias="prefix"),
-    delimiter: str = Query(default="", alias="delimiter"),
-    max_keys: int = Query(default=1000, alias="max-keys"),
-    continuation_token: str | None = Query(default=None, alias="continuation-token"),
-    session: Session = Depends(get_session),
+    prefix: str,
+    delimiter: str,
+    max_keys: int,
+    continuation_token: str | None,
+    session: Session,
 ) -> Response:
     if not session.get(Bucket, bucket):
         return _err("NoSuchBucket", "The specified bucket does not exist.", resource=f"/{bucket}", status=404)
@@ -121,12 +106,7 @@ def list_objects(
         delimiter=delimiter,
         max_keys=max_keys,
         objects=[
-            {
-                "key": obj.key,
-                "last_modified": obj.last_modified,
-                "etag": obj.etag,
-                "size": obj.size,
-            }
+            {"key": obj.key, "last_modified": obj.last_modified, "etag": obj.etag, "size": obj.size}
             for obj in result_objs
         ],
         common_prefixes=sorted(common_prefixes),
@@ -135,3 +115,41 @@ def list_objects(
         next_continuation_token=next_token,
     )
     return Response(content=body, media_type="application/xml")
+
+
+@router.get("/")
+def list_buckets(session: Session = Depends(get_session)) -> Response:
+    buckets = session.exec(select(Bucket)).all()
+    body = _xml.build_list_buckets_response(
+        owner_id="owner",
+        owner_name="owner",
+        buckets=[{"name": b.name, "creation_date": b.creation_date} for b in buckets],
+    )
+    return Response(content=body, media_type="application/xml")
+
+
+@router.put("/{bucket}")
+def create_bucket(bucket: str, session: Session = Depends(get_session)) -> Response:
+    return handle_create_bucket(bucket, session)
+
+
+@router.head("/{bucket}")
+def head_bucket(bucket: str, session: Session = Depends(get_session)) -> Response:
+    return handle_head_bucket(bucket, session)
+
+
+@router.delete("/{bucket}")
+def delete_bucket(bucket: str, session: Session = Depends(get_session)) -> Response:
+    return handle_delete_bucket(bucket, session)
+
+
+@router.get("/{bucket}")
+def list_objects(
+    bucket: str,
+    prefix: str = Query(default="", alias="prefix"),
+    delimiter: str = Query(default="", alias="delimiter"),
+    max_keys: int = Query(default=1000, alias="max-keys"),
+    continuation_token: str | None = Query(default=None, alias="continuation-token"),
+    session: Session = Depends(get_session),
+) -> Response:
+    return handle_list_objects(bucket, prefix, delimiter, max_keys, continuation_token, session)
