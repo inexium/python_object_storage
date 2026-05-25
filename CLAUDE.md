@@ -2,6 +2,8 @@
 
 Stockage objet compatible AWS S3, écrit en Python 3.13. L'API implémente les routes S3 de base (buckets, objets, multipart uploads) et est conçue pour tourner en conteneur Docker.
 
+> **Plan d'implémentation** : voir [`PLAN.md`](./PLAN.md) pour l'ordre de réalisation des composants.
+
 ## Stack technique
 
 | Composant | Rôle |
