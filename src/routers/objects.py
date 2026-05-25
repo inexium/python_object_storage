@@ -5,12 +5,13 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import formatdate
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlmodel import Session, select
 
 from src.database import get_session
 from src.models.bucket import Bucket
 from src.models.object import Object
+from src.routers.multipart import handle_abort_multipart, handle_list_parts, handle_upload_part
 from src.services.storage import StorageService
 from src.services.xml_builder import XmlBuilder
 
@@ -141,8 +142,13 @@ async def put_object(
     bucket: str,
     key: str,
     request: Request,
+    part_number: int | None = Query(default=None, alias="partNumber"),
+    upload_id: str | None = Query(default=None, alias="uploadId"),
     session: Session = Depends(get_session),
 ) -> Response:
+    if part_number is not None and upload_id is not None:
+        body = await request.body()
+        return handle_upload_part(bucket, key, upload_id, part_number, body, session)
     if not session.get(Bucket, bucket):
         return _err("NoSuchBucket", "The specified bucket does not exist.", resource=f"/{bucket}", status=404)
 
@@ -193,8 +199,11 @@ def get_object(
     bucket: str,
     key: str,
     request: Request,
+    upload_id: str | None = Query(default=None, alias="uploadId"),
     session: Session = Depends(get_session),
 ) -> Response:
+    if upload_id is not None:
+        return handle_list_parts(bucket, key, upload_id, session)
     if not session.get(Bucket, bucket):
         return _err("NoSuchBucket", "The specified bucket does not exist.", resource=f"/{bucket}", status=404)
 
@@ -232,8 +241,11 @@ def head_object(
 def delete_object(
     bucket: str,
     key: str,
+    upload_id: str | None = Query(default=None, alias="uploadId"),
     session: Session = Depends(get_session),
 ) -> Response:
+    if upload_id is not None:
+        return handle_abort_multipart(bucket, key, upload_id, session)
     if not session.get(Bucket, bucket):
         return _err("NoSuchBucket", "The specified bucket does not exist.", resource=f"/{bucket}", status=404)
 
